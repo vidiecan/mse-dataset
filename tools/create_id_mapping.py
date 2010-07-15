@@ -11,47 +11,9 @@
 
 from __future__ import with_statement
 
-import sys
+import sys, os
 from optparse import OptionParser
 import mse
-
-def create_data_mapping (directory):
-	"""
-		For every file append a pair 
-		id:file
-		to mappings directory.
-	"""
-	import traceback, os, pickle
-
-	# prepare file names
-	mapping_dir = os.path.join (directory, mse.settings["mapping_dir"])
-	mapping_file = os.path.join (mapping_dir, mse.settings["mapping_documents_file"])
-	data_dir = os.path.join (directory, mse.settings["data_dir"])
-	if not os.path.exists (data_dir):
-		print "Data directory '%s' does not exist, aborting." % data_dir
-		return
-	if not os.path.exists (mapping_dir):	os.mkdir (mapping_dir)
-
-	# try to guess dataset name from the last directory or just use 'dataset'
-	data_name = os.path.basename(directory).strip("\\/").strip()
-	if data_name == "": data_name = "dataset"
-
-	try:
-		d = []; i = 0
-		with open (mapping_file, "w+") as f:
-			# write to file on the fly
-			for file in os.listdir (data_dir):
-				i += 1
-				key = data_name+"-%d" % i
-				d += (key, file)
-				f.write ("%s:%s\n" % (key, file))
-				print key, "--", file
-
-		# python dump
-		pickle.dump (d, open (mapping_file+".pickle", "w+"))
-	except:
-		mse.print_exception ("Problem with file/directory while creating data mapping, details follow:")
-
 
 def is_true (val1):
 	"""
@@ -62,9 +24,10 @@ def is_true (val1):
 
 # parameters like this to be user friendly
 params = {
-	"do_query": "False",
-	"do_data" : "False",
-	"path"				 : "./",
+	"do_query"			: "False",
+	"do_data" 			: "False",
+	"do_query_files": "False",
+	"path"				 	: "./",
 }
 
 # handle parameters
@@ -73,6 +36,9 @@ if len (sys.argv) > 1:
 	parser.add_option ("-q", "--query", 
 		   							 action="store_true", dest="do_query", default=params["do_query"],
 		   							 help="create mapping for queries") 
+	parser.add_option ("-f", "--query-files", 
+		   							 action="store_true", dest="do_query_files", default=params["do_query_files"],
+		   							 help="create query files from one file") 
 	parser.add_option ("-d", "--data", 
 										 action="store_true", dest="do_data", default=params["do_data"],
 										 help="create mapping for data")
@@ -88,23 +54,64 @@ else:
 
 mse.print_params (params)
 
+mapping_dir = os.path.join (params["path"], mse.settings["mapping_dir"])
+
 # do the actual stuff
 if is_true(params["do_data"]):
-	create_data_mapping (params["path"])
+
+	print "Performing data ids."
+	mapping_file = os.path.join (mapping_dir, mse.settings["mapping_documents_file"])
+	data_dir = os.path.join (params["path"], mse.settings["data_dir"])
+	mse.create_ids (input_dir=data_dir, output_file=mapping_file)
 
 
+elif is_true(params["do_query"]):
+
+	print "Performing query ids."
+	mapping_file = os.path.join (mapping_dir, mse.settings["mapping_query_file"])
+	data_dir = os.path.join (params["path"], mse.settings["query_dir"])
+	mse.create_ids (input_dir=data_dir, output_file=mapping_file, regexp=r".*\.xml")
 
 
+elif is_true(params["do_query_files"]):
 
+	print "Performing extraction of query files"
+	query_dir = os.path.join (params["path"], mse.settings["query_dir"])
+	query_summary = os.path.join (query_dir, mse.settings["query_file_summary"])
+	if not os.path.exists (query_summary):
+		print "Query summary not found: ", query_summary
+		sys.exit ()
+	
+	import xml.dom.minidom
 
+	def write_mathml (file, name, math):
+		"""
+			Helper method for creating valid mathml documents with only one query
+		"""
 
+		# header
+		file.write (
+			'<html xmlns="http://www.w3.org/1999/xhtml">\n'+
+			" <head><title>Mathml MSE-Dataset query - %s</title></head>\n"%name+
+			" <body>\n")
+		#xml
+		math.writexml (file) 
+		# footer
+		file.write ("\n </body>\n</html>\n")
 
+	try:
+		dom = xml.dom.minidom.parse (query_summary)	
+		queries = dom.getElementsByTagName ("math")
+		print "Found %d queries" % len(queries)
+		i = 0
+		for q in queries:
+			i += 1
+			file_name = "query-%d.xml" % i
+			with open (os.path.join (query_dir, file_name), "w+") as f:
+				write_mathml (f, file_name, q)
 
-
-
-
-
-
-
+	except:
+		mse.print_exception ("Error in processing xml file %s" % query_summary)
+	
 
 
