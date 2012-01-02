@@ -1,5 +1,5 @@
 """
- Utility class for MSE-Dataset to be consistent accross tools.
+ Utility class for MSE-Dataset to be consistent across tools.
 
  Changed: 2010/07/15 by jozef
 """
